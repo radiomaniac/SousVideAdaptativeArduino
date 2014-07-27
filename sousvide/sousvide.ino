@@ -32,6 +32,11 @@
 *       Added a safety to ensure that heater doesn't blow a thermal fuse during ramp up, waiting for water to change temperature (which it doesn't)
 *       No sense in slowly increasing temperature until just 65%, just ramp it all the way to 90%
 *       Make heater always within a few degrees of targetTemp especially.  We can do this by monitoring the heater temperature which has a faster and larger response to heating.
+*           Things about rice cooker heaters to remember
+*               Heater element can cool much futher than water
+*               Heater element when much cooler than water can no longer "instantly" heat water
+*               Heater element when much hotter than water can no longer stop heating water.
+*               Heater element when a little hotter than water still heats water.  So don't leave the heater on until it's 50C over the water since then water can't stop heating.
 *       Prevent heater from getting much hotter than water since targetTemp will be overshot a lot due to residual heat in heater
 *       TODO: Probably need to keep the heater 2-5 degrees hotter than the targetTemp just to keep heat going in.
 */
