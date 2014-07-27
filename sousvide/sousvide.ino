@@ -22,6 +22,39 @@
 *  - Dead cheap and simple : no expensive LCD or Solid State Relay
 *
 */
+#include <LiquidCrystal.h>
+LiquidCrystal lcd(2, 4, 5, 6, 7, 8);
+
+// ************************************************
+// DiSplay Variables and constants
+// ************************************************
+
+//Adafruit_RGBLCDShield lcd = Adafruit_RGBLCDShield();
+// These #defines make it easy to set the backlight color
+#define RED 0x1
+#define YELLOW 0x3
+#define GREEN 0x2
+#define TEAL 0x6
+#define BLUE 0x4
+#define VIOLET 0x5
+#define WHITE 0x7
+
+#define BUTTON_SHIFT BUTTON_SELECT
+
+
+byte degree[8] = // define the degree symbol 
+{ 
+  B00110, 
+  B01001, 
+  B01001, 
+  B00110, 
+  B00000,
+  B00000, 
+  B00000, 
+  B00000 
+}; 
+
+
 
 // ------------------------- PARTS NEEDED
 
@@ -57,31 +90,47 @@
 
 // ------------------------- CONSTANTS
 
+  #define UP_BTN 10
+  #define DOWN_BTN 12
+  #define LEFT_BTN 9
+  #define RIGHT_BTN 11
+  #define SHIFT_BTN 13  
+  
+  #define WATER_PIN A5
+  #define HEATER_PIN A4
+  
+  
+#define HEATER_STOP_C 95.0
+#define HEATER_LIMIT_C 110.0
+#define MAX_HEATER_LAG 0.0    // Don't allow heater lag for a rice cooker
+
 // 8 segment display drivers
-#define TEMP_DISPLAY_DRIVER 0
+//#define TEMP_DISPLAY_DRIVER 0
 #define DISPLAY_LEFT 4  //left 4 digits of display
 #define DISPLAY_RIGHT 0  //right 4 digits of display
-#define REVERSE_DISPLAY 0 //set to 7 if your displays first digit is on the left
+#define DISPLAY_CENTER 8
+
+//#define REVERSE_DISPLAY 0 //set to 7 if your displays first digit is on the left
 
 // push-buttons
-#define BT_TEMP_MORE_PIN 6 //INPUT_PULLUP mode
-#define BT_TEMP_LESS_PIN 5 //INPUT_PULLUP mode
+#define BT_TEMP_MORE_PIN 10 //INPUT_PULLUP mode
+#define BT_TEMP_LESS_PIN 12 //INPUT_PULLUP mode
 
 // piezo
 #define PIEZO_PIN 13
 
 // temperature sensor
-#define ONE_WIRE_BUS 9
+//#define ONE_WIRE_BUS 9
 #define TEMPERATURE_PRECISION 9
 #define SAMPLE_DELAY 5000
 #define OUTPUT_TO_SERIAL true
 
 // relay
-#define RELAY_OUT_PIN 8
+#define RELAY_OUT_PIN 3
 
 
 // First Ramp
-#define FIRST_RAMP_CUTOFF_RATIO 0.65
+#define FIRST_RAMP_CUTOFF_RATIO 0.90
 
 // Security features
 #define MIN_TARGET_TEMP 50   /*sufficient for most sous-vide recipes*/
@@ -96,6 +145,14 @@
 #define LARGE_TEMP_DIFFERENCE 1  /* for more than "1" degree, use the Large setting (Small otherwise)*/
 
 // ------------------------- DEFINITIONS & INITIALISATIONS
+// JC Vars
+
+double previousWaterTemp = 0;
+double previousHeaterTemp = 0;
+
+double CurrentWaterTemp;
+double CurrentHeaterTemp;
+int heaterOn = 0;
 
 // buttons
 int sw_tempMore;
@@ -136,6 +193,8 @@ boolean doBackToFirstRampWhenStabilizing = false;
 boolean isHeatOn = false;
 boolean isCounteracting = false;
 enum operatingState { INITIAL_WAIT = 0, TEMP_DROP, TEMP_RISE, FIRST_RAMP, BOOST_TEMP, COUNTER_FALL, WAIT_NATURAL_DROP, REGULATE};
+char *opStateStrings[8] = {"iW", "tD", "tR", "fR", "bT", "cF", "nD", "Rg"};
+
 operatingState opState = INITIAL_WAIT;
 enum boostTypes {HIGHBOOST = 0, LOWBOOST};
 boostTypes boostType = HIGHBOOST;
@@ -177,12 +236,110 @@ unsigned long  tCheckNotHeatingWildly;
  pin 10 is connected to LOAD 
  We have 1 MAX7219.
 */
-LedControl lc=LedControl(12,11,10,1);
-// Set up a oneWire instance and Dallas temperature sensor
-OneWire oneWire(ONE_WIRE_BUS);
-DallasTemperature sensors(&oneWire);	
-// variable to store temperature probe address
-DeviceAddress tempProbeAddress; 
+//LedControl lc=LedControl(12,11,10,1);
+//// Set up a oneWire instance and Dallas temperature sensor
+//OneWire oneWire(ONE_WIRE_BUS);
+//DallasTemperature sensors(&oneWire);	
+//// variable to store temperature probe address
+//DeviceAddress tempProbeAddress; 
+
+
+
+void turnOffRelay(char reason)
+{
+  lcd.setCursor(14,0);
+  lcd.print(opStateStrings[opState]);
+
+  lcd.setCursor(14,1);
+  lcd.print("  ");
+  
+  lcd.setCursor(14,1);   
+  lcd.print(reason);
+  
+  if (previousHeaterTemp < targetTemp - MAX_HEATER_LAG) // Don't let heater cool off too much below targetTemp
+  {
+    lcd.setCursor(15,1);
+    lcd.print("h");
+    digitalWrite(RELAY_OUT_PIN,HIGH);
+    // But still pretend we are off, so set no other variables.
+  }
+  else
+  {
+    lcd.setCursor(15,1);   
+    lcd.print(".");
+  
+    digitalWrite(RELAY_OUT_PIN,LOW);
+    tLastTurnOffRelay = millis();
+    tCheckNotHeatingWildly = 0;
+    isHeatOn = false;
+  }
+}    
+
+void turnOffRelay()
+{
+  turnOffRelay('.');
+}
+
+void checkHeaterSafety()
+{
+  if (isHeatOn) {
+  
+    double waterUnderTargetDelta = 0;
+    if (previousWaterTemp < targetTemp) {
+      waterUnderTargetDelta = targetTemp - previousWaterTemp;
+    }
+  
+    // Safety Check
+    if(previousHeaterTemp > HEATER_STOP_C) {
+      turnOffRelay('X');
+    } else if ( previousWaterTemp > targetTemp) { // Don't heat if water is at temp
+      turnOffRelay('W');
+    } else if ( (previousWaterTemp < targetTemp) && (previousHeaterTemp > targetTemp + waterUnderTargetDelta + 2) ) {  // Don't make the heater much hotter than water when approaching set temperature
+      turnOffRelay('N');    
+    } else if ( (previousWaterTemp < targetTemp) && (previousHeaterTemp > targetTemp + 20) ) { // Don't heat if heater is already 20 degrees over target
+      turnOffRelay('H');
+    }
+  }
+  
+}
+
+
+void turnOnRelay()
+{
+  lcd.setCursor(14,0);
+  lcd.print(opStateStrings[opState]);
+  lcd.setCursor(14,1);
+  lcd.print("  ");
+//
+//64 65 88
+//w  t  h
+  double waterUnderTargetDelta = 0;
+  if (previousWaterTemp < targetTemp) {
+      waterUnderTargetDelta = targetTemp - previousWaterTemp;
+  }
+    
+  
+  // Safety Check
+  if(previousHeaterTemp > HEATER_STOP_C) {
+    turnOffRelay('x');
+  } else if ( previousWaterTemp > targetTemp) { // Don't heat if water is at temp
+    turnOffRelay('w');
+  } else if ( (previousWaterTemp < targetTemp) && (previousHeaterTemp > targetTemp + waterUnderTargetDelta + 2) ) {  // Don't make the heater much hotter than water when approaching set temperature
+    turnOffRelay('n');    
+  } else if ( (previousWaterTemp < targetTemp) && (previousHeaterTemp > targetTemp + 20) ) { // Don't heat if heater is already 20 degrees over target
+    turnOffRelay('h');
+  } else {
+    lcd.setCursor(15,1);
+    lcd.print("+");
+    digitalWrite(RELAY_OUT_PIN,HIGH);
+    tCheckNotHeatingWildly = millis() + ((unsigned long)60000 * MAX_HEATINGTIME_NO_TEMP_CHANGE_MINUTES);
+  //  displayMsg("tCheckNotHeatingWildly =");
+    displayMsg("wild?", tCheckNotHeatingWildly);
+    tempBeforeHeating = actualTemp;
+    isHeatOn = true;
+  }
+}
+    
 
 
 // ------------------------- SETUP
@@ -193,9 +350,21 @@ void setup() {
 	/*
 	Initialize MAX7219 display driver
 	*/
-	  lc.shutdown(0,false);
-	  lc.setIntensity(0,2);
-	  lc.clearDisplay(0);
+//	  lc.shutdown(0,false);
+//	  lc.setIntensity(0,2);
+//	  lc.clearDisplay(0);
+  lcd.begin(16, 2);
+  lcd.createChar(1, degree); // create degree symbol from the binary
+
+  //   lcd.setBacklight(VIOLET);
+  lcd.setCursor(0, 0);
+  lcd.print(F("    Booting..."));
+  lcd.setCursor(0, 1);
+  lcd.print(F("   Rice Vide!"));
+
+  delay(400);  // Splash screen
+  
+  
 
 	/*
 	Initialize pushButtons
@@ -205,16 +374,17 @@ void setup() {
 	/*
 	Initialize temperature sensor
 	*/
-	sensors.begin();
-	delay(1000);   
-	sensors.getAddress(tempProbeAddress, 0);  
-	delay(1000);   
-	sensors.requestTemperaturesByIndex(0); // Send the command to get temperatures
-	delay(1000);
+//	sensors.begin();
+//	delay(1000);   
+//	sensors.getAddress(tempProbeAddress, 0);  
+//	delay(1000);   
+//	sensors.requestTemperaturesByIndex(0); // Send the command to get temperatures
+//	delay(1000);
 	/*
 	Read temperature
 	*/
-	actualTemp =  sensors.getTempC(tempProbeAddress);
+//	actualTemp =  sensors.getTempC(tempProbeAddress);
+        actualTemp = getWaterTempC();
 	targetTemp = (long) ((int)actualTemp);
 
 	/*
@@ -222,7 +392,8 @@ void setup() {
 	*/
 	displayActualTemp(actualTemp);
 	displayTargetTemp(targetTemp);
-
+        displayHeaterTemp(getHeaterTempC());
+        
 	//prepare Relay port for writing
 	pinMode(RELAY_OUT_PIN, OUTPUT);  
 	digitalWrite(RELAY_OUT_PIN,LOW);
@@ -249,10 +420,14 @@ void setup() {
 void loop() {   
       
   tcurrent = millis();
-  
+
+  displayHeaterTemp(getHeaterTempC());
     
   // get temperature every few seconds and output it to serial if needed. Alert if we are within range
   GetTemperatureAndEnforceSecurity();
+  
+  checkHeaterSafety(); // JC: Turn off heater if it's much hotter than water.
+  
   // compute current temperatue Derivative
   SetActualDerivative();
   
@@ -285,17 +460,17 @@ void loop() {
 				// we are close to environmentTemp. The temp probe is probably off-water; wait till temperature rises again sharply then stablilizes
 				waitForSuddenRise = true;
 				
-				Serial.println("TEMP_DROP : wait temprise");
+				displayMsg("TEMP_DROP : wait temprise");
 			} else {
 				// something very cold was inserted in the cooker; or not. either way, the temp probe is back. let's regulate 							
 				if (doBackToFirstRampWhenStabilizing)
 				{
-					Serial.println("TEMP_RISE : initial ramping");
+					displayMsg("TEMP_RISE : initial ramping");
 					opState = FIRST_RAMP;
 				} 
 				else 
 				{				
-					Serial.println(" TEMP_DROP : Cold ! reg");
+					displayMsg(" TEMP_DROP : Cold ! reg");
 					EnterRegulateStateOrWaitSmoothLowering();
 				}
 			}
@@ -309,12 +484,12 @@ void loop() {
 		{			
 			if (doBackToFirstRampWhenStabilizing)
 			{
-				Serial.println(" TEMP_RISE : back to initial ramping");
+				displayMsg(" TEMP_RISE : back to initial ramping");
 				opState = FIRST_RAMP;
 			} 
 			else 
 			{	
-				Serial.println(" TEMP_RISE : back to normal : reg");
+				displayMsg(" TEMP_RISE : back to normal : reg");
 				EnterRegulateStateOrWaitSmoothLowering();
 			}
 		}
@@ -331,18 +506,18 @@ void loop() {
 		// ON, until deriv == 0 then cut and wait stabilization
 		if (isNewSample) 
 		{		
-			Serial.println(" Counterfall check");
+			displayMsg(" Counterfall check");
 			if (waitingForStabilization == false)	
 			{			
 				// check derivative
 				//if(isDerivativeReliable && currentTempDerivative > -0.005)
 				double predicted = predictTemp(tOperationalDelay) ;
-				Serial.print(" predicted temp : ");
-				Serial.println(predicted);
-				
+
+				displayMsg("fPredict ", predicted);
+
 				if ( predicted >= (targetTemp - 1)  && isDerivativeReliable && currentTempDerivative > 0.001)  // targetTemp - 1 is to avoid overshoot because prediction is not precise enough
 				{
-					Serial.println(" TURNOFFRELAY !");
+					displayMsg(" TURNOFFRELAY !");
 					turnOffRelay();
 					waitingForStabilization = true;
 				}					
@@ -351,7 +526,7 @@ void loop() {
 			{
 				if ( IsStabilizingOrDropping() )
 				{
-					Serial.println(" COUNTER_FALL finished : reg");
+					displayMsg("ctrFall->Re");
 					
 					//reset counter
 					warningsBeforeCounterFall = 3;
@@ -393,13 +568,13 @@ void loop() {
 			{
 				if(IsStabilizingOrGrowing())
 				{ 
-					Serial.println("NATURAL_DROP ended: wait stabilize");					
+					displayMsg("NATURAL_DROP ended: wait stabilize");					
 					opState = TEMP_RISE; // make sure we stabilize before regulating again
 				} 
 				
 				if(IsAcceleratingFall())
 				{
-					Serial.println("fall:tryagain!");
+					displayMsg("fall:tryagain!");
 					isCounteracting = false;
 				}			
 			}
@@ -430,7 +605,7 @@ void loop() {
   readButtonInputs();
   
   // update displays
-  displayActualTemp(actualTemp);
+//  displayActualTemp(actualTemp);
   displayTargetTemp(targetTemp);
  
   // pause loop
@@ -458,7 +633,7 @@ void EnterRegulateStateOrWaitSmoothLowering()
 
 	if (actualTemp < targetTemp + 0.3)
 	{
-		Serial.println("EnterRegulateState !");
+		displayMsg("EnterRegulateState !");
 		ResetVariablesForRegulationCalculation();
 		
 		tBackToHigh = 0;	
@@ -484,7 +659,7 @@ void WaitForNaturalDrop()
 {
 	opState = WAIT_NATURAL_DROP;
 	isCounteracting = false;
-	Serial.println("WAIT_NATURAL_DROP!"); 
+	displayMsg("WAIT_NATURAL_DROP!"); 
 	ResetVariablesForRegulationCalculation();	
 }
 
@@ -503,10 +678,8 @@ void Regulate()
 			}
 			tStartRealRegulation = millis();
 			tBackToHigh = millis() + durationOffPulse;
-			Serial.print("durationOffPulse = ");
-			Serial.print(durationOffPulse);
-			Serial.print("durationOnPulse = ");
-			Serial.println(durationOnPulse);
+			displayMsg("durationOffPulse = ",durationOffPulse);
+			displayMsg("durationOnPulse = ", durationOnPulse);
 
 			
 			WaitForNaturalDrop();
@@ -527,10 +700,8 @@ void Regulate()
 				durationOffPulse = durationOffPulse * 1.2;
 				durationOnPulse = durationOnPulse * 1.2 ;
 			}
-			Serial.print("durationOffPulse = ");
-			Serial.print(durationOffPulse);
-			Serial.print("   durationOnPulse = ");
-			Serial.println(durationOnPulse);			
+			displayMsg("durationOffPulse = ", durationOffPulse);
+			displayMsg("   durationOnPulse = ", durationOnPulse);			
 		}	  
 		StartBoostToTarget();		
 	} 
@@ -592,17 +763,17 @@ void PerformRegulationCalculations()
 			tMinReg = millis();
 		}
 		
-		Serial.print(" --- avgTemp3 = ");
-		Serial.print(averageTemp3, DEC);
-		Serial.print(" --- maxRegTEmp = ");
-		Serial.print(maxRegTEmp, DEC);
-		Serial.print(" --- minRegTEmp = ");
-		Serial.print(minRegTEmp, DEC);
-		Serial.print(" --- tMaxReg = ");
-		Serial.print(tMaxReg);
-		Serial.print(" --- tMinReg = ");
-		Serial.println(tMinReg);
-		
+		displayMsg(" --- avgTemp3 = ", averageTemp3);
+                delay(300);
+		displayMsg(" --- maxRegTEmp = ", maxRegTEmp);
+                delay(300);
+		displayMsg(" --- minRegTEmp = ", minRegTEmp);
+                delay(300);
+		displayMsg(" --- tMaxReg = ", tMaxReg);
+                delay(300);
+		displayMsg(" --- tMinReg = ", tMinReg);
+                delay(300);
+                		
 		
 		// wait till we lost DROP_DEGREES_FOR_CALC_REGULATION degrees
 		if (maxRegTEmp > 0 && minRegTEmp > 0 && (((long)(tMinReg - tMaxReg)) > 0) && ((maxRegTEmp - minRegTEmp) > DROP_DEGREES_FOR_CALC_REGULATION))
@@ -634,7 +805,7 @@ void SetActualDerivative()
 	if (isNewSample)
 	{
 		isDerivativeReliable = checkDerivativeReliable();		
-		Serial.print("d = ");	
+		displayMsg("d = ");	
 		if (isDerivativeReliable)
 		{
 			//remove biggest and lowest values (get rid off irregularities)
@@ -713,10 +884,10 @@ void SetActualDerivative()
 			// calculate last derivative
 			previousDerivative = currentTempDerivative;
 			currentTempDerivative = ((pastValues[0] - pastValues[1]) / (3* SAMPLE_DELAY/1000));
-			Serial.println(currentTempDerivative, DEC);
+			displayMsg("cTempDer", currentTempDerivative);
 		}	else
 		{
-			Serial.println("NC!");	
+			displayMsg("!derRe");	
 		}
 	}	
 }
@@ -743,7 +914,7 @@ void GetTemperatureAndEnforceSecurity()
 			opState = TEMP_DROP;
 			tempBeforeDrop = tempPreviousArray[0];
 			waitForSuddenRise = false;	
-			Serial.println("REMOVED TEMP PROBE!");	
+			displayMsg("REMOVED TEMP PROBE!");	
 			
 			if (tStartBoostTemp - millis() <= 3 * SAMPLE_DELAY)
 			{
@@ -765,7 +936,7 @@ void GetTemperatureAndEnforceSecurity()
 			tempPreviousArray[4]=0;
 			tempPreviousArray[5]=0;
 				
-			Serial.println("PROBE BACK");
+			displayMsg("PROBE BACK");
 		}	
 		if (opState == BOOST_TEMP && (actualTemp - tempPreviousArray[0] > 1))
 		{
@@ -787,9 +958,8 @@ void GetTemperatureAndEnforceSecurity()
 		tempPreviousArrayPushValue(actualTemp); 
 		isNewSample = true;
 		if (OUTPUT_TO_SERIAL) {
-		  Serial.print(tcurrent/1000, DEC);
-		  Serial.print(";  ");
-		  Serial.println(actualTemp, 3);
+		  displayMsg("timeCur", tcurrent/1000);
+//		  displayMsg("ACT", actualTemp);
 		}    
 		if (actualTemp > targetTemp + 0.15)
 		{
@@ -841,8 +1011,7 @@ void StartBoostToTarget(double offset)
 	if (realTargetTemp > actualTempAtBoostStart)
 	{	
 		expectedTempChange = realTargetTemp - actualTempAtBoostStart;
-		Serial.print("BOOST_TEMP! expectedTempChange = ");
-		Serial.println(expectedTempChange);
+		displayMsg("BT! etc", expectedTempChange);
 		HeatForDegrees(expectedTempChange);	
 		// change state
 		opState = BOOST_TEMP;
@@ -880,10 +1049,10 @@ void HeatForDegrees(double degrees)
 		if ( (long) (millis() - tBackToLow) < 0)
 		{  
 		  turnOnRelay();
-		  Serial.print("HEAT ON ! tBackToLow = ");
-		  Serial.println(tBackToLow, DEC);
-		  Serial.print("tCheckStabilize = ");
-		  Serial.println(tCheckStabilize);
+		  displayMsg("HO! tBTL", tBackToLow); // ON ! tBackToLow = ");
+                  delay(500);
+//		  displayMsg("tCheckStabilize = ");
+		  displayMsg("tCS", tCheckStabilize);
 		}  	
 	}
 }
@@ -905,7 +1074,7 @@ void PerformBoostTemp()
 			// check if stabilizing 
 			if  (IsStabilizingOrDropping())
 			{			
-				Serial.println("STabilized !");
+				displayMsg("STabilized !");
 				FinishBoostTemp();
 			}   
 		}		 
@@ -926,10 +1095,10 @@ void PerformBoostTemp()
 			storedTargetTemp = targetTemp;
 			expectedTempChange = expectedTempChange + changeOffset;
 			
-			Serial.print("target temp changed, new tBackToLow = ");
-			Serial.println(tBackToLow);
-			Serial.print("target temp changed, new expectedTempChange = ");
-			Serial.println(expectedTempChange);
+//			displayMsg("target temp changed, new tBackToLow = ");
+			displayMsg("ttc,nBTL", tBackToLow);
+//			displayMsg("target temp changed, new expectedTempChange = ");
+			displayMsg("ttc,neTC", expectedTempChange);
 		}
    }
 }
@@ -939,7 +1108,7 @@ void FinishBoostTemp()
 {      
 	AdaptGain(actualTemp);
    
-   Serial.println("FinishBoostTemp !");
+   displayMsg("FinishBoostTemp !");
    
    // enter REGULATE state
    EnterRegulateStateOrWaitSmoothLowering();
@@ -1006,13 +1175,13 @@ void AdaptGain(double resultingTemp)
 		{
 		case LOWBOOST:				
 			secondPerDegreeGainSmall = gain;
-			Serial.print("secondPerDegreeGainSmall =");
-			Serial.println(secondPerDegreeGainSmall);
+//			displayMsg("secondPerDegreeGainSmall =");
+			displayMsg("LBsPDGS", secondPerDegreeGainSmall);
 			break;
 		case HIGHBOOST:	
 			secondPerDegreeGainLarge = gain;
-			Serial.print("secondPerDegreeGainLarge =");
-			Serial.println(secondPerDegreeGainLarge);
+//			displayMsg("secondPerDegreeGainLarge =");
+			displayMsg("HBsPDGL", secondPerDegreeGainLarge);
 			break;
 		}
    }
@@ -1038,8 +1207,8 @@ void setupCutOffTempForInitialRamping()
    firstRampCutOffTemp = initialTemp +  (targetTemp - initialTemp) * FIRST_RAMP_CUTOFF_RATIO;
    storedTargetTemp = targetTemp;
    
-   Serial.print("firstRampCutOffTemp = ");
-   Serial.println(firstRampCutOffTemp, DEC);
+//   displayMsg("firstRampCutOffTemp = ");
+   displayMsg("ramp1Tmp", firstRampCutOffTemp);
 }
 
 void PerformFirstRamp()
@@ -1054,8 +1223,8 @@ void PerformFirstRamp()
     {
 		// switch off heat and wait for stabilization
        if (digitalRead(RELAY_OUT_PIN) == HIGH) {
-         Serial.print("STOP at actualTemp = ");
-         Serial.println(actualTemp, DEC);
+//         displayMsg("STOP at actualTemp = ");
+         displayMsg("rmp1stop", actualTemp);
          turnOffRelay();  
          tFirstRampCutOff = millis();
        }
@@ -1082,8 +1251,8 @@ void PerformFirstRamp()
          {
            tOperationalDelay = (millis() - tStartFirstRamp - 3*SAMPLE_DELAY);
 		   burnupTime = tOperationalDelay / 20; // arbitrary... to be perfected
-           Serial.print("tOperationalDelay = ");
-           Serial.println(tOperationalDelay, DEC);
+//           displayMsg("tOperationalDelay = ");
+           displayMsg("rmp1delay", tOperationalDelay);
          }          
        }
     }
@@ -1109,10 +1278,11 @@ void FinishInitialRamping()
   secondPerDegreeGainLarge = secondPerDegreeGainRef;  
   secondPerDegreeGainSmall = secondPerDegreeGainLarge;
 
-   Serial.print("FinishInitialRamping !   tEndFirstRamp = ");
-   Serial.println(tEndFirstRamp, DEC);
-   Serial.print("secondPerDegreeGainLarge = ");
-   Serial.println(secondPerDegreeGainLarge);
+//   displayMsg("FinishInitialRamping !   tEndFirstRamp = ");
+   displayMsg("rmp1fin", tEndFirstRamp);
+   delay(200);
+//   displayMsg("secondPerDegreeGainLarge = ");
+   displayMsg("secPDGL", secondPerDegreeGainLarge);
 
    
   // enter REGULATE state
@@ -1120,24 +1290,6 @@ void FinishInitialRamping()
 }
 
 
-void turnOnRelay()
-{
-  	Serial.println("HEAT ON !");
-  digitalWrite(RELAY_OUT_PIN,HIGH);
-  tCheckNotHeatingWildly = millis() + ((unsigned long)60000 * MAX_HEATINGTIME_NO_TEMP_CHANGE_MINUTES);
-  Serial.println("tCheckNotHeatingWildly =");
-  Serial.println(tCheckNotHeatingWildly, DEC);
-  tempBeforeHeating = actualTemp;
-  isHeatOn = true;
-}
-    
-void turnOffRelay()
-{
-  digitalWrite(RELAY_OUT_PIN,LOW);
-  tLastTurnOffRelay = millis();
-  tCheckNotHeatingWildly = 0;
-  isHeatOn = false;
-}    
     
 // Security checks    
 void checkShutdownConditions(){
@@ -1146,14 +1298,21 @@ void checkShutdownConditions(){
   // check for too long uptime
   if ( (long) (millis() - maxUptimeMillis) >= 0)
   {
-    Serial.println(maxUptimeMillis);
+    displayMsg("uptime", maxUptimeMillis);
     doShutdown = true;
   }
   
   // check for too high temperature
+  if (previousHeaterTemp > HEATER_LIMIT_C)
+  {
+    displayMsg("heatSafe", previousHeaterTemp);
+    doShutdown = true;
+  }
+  
+  
   if (actualTemp > SHUTDOWN_TEMP)
   {
-    Serial.println(actualTemp);
+    displayMsg("h2oSafe", actualTemp);
     doShutdown = true;
   }
   
@@ -1163,7 +1322,7 @@ void checkShutdownConditions(){
     if (actualTemp <= tempBeforeHeating)
     {
       // temperature did not increase even if we kept on heating during MAX_HEATINGTIME_NO_TEMP_CHANGE_MINUTES
-      Serial.println("MAX_HEATINGTIME_NO_TEMP_CHANGE_MINUTES !");
+      displayMsg("MAX_HEATINGTIME_NO_TEMP_CHANGE_MINUTES !");
       doShutdown = true;
     }
     // plan next check
@@ -1180,16 +1339,19 @@ void checkShutdownConditions(){
 
 void shutdownDevice() 
 {
-    eraseDisplay();
-	displayActualTemp(0);
-	displayTargetTemp(0);
+   digitalWrite(RELAY_OUT_PIN,LOW);
+   isHeatOn = false;
+
+//    eraseDisplay();
+//    displayActualTemp(0);
+//    displayTargetTemp(0);
 
     if (OUTPUT_TO_SERIAL) {      
-        Serial.println("SHUTDOWN");
+        lcd.setCursor(0,1);
+        lcd.print("----SHUTDOWN----");
     }
     // turn off relay !
-    digitalWrite(RELAY_OUT_PIN,LOW);
-	isHeatOn = false;
+
     while(1)
     {
       delay(30000);
@@ -1221,8 +1383,8 @@ void SetApproximatePulseDurationsForREgulation(double tempLost, unsigned long re
 
 void SetPulseDurationsForREgulation(unsigned long neededUptimeForCompensate, unsigned long regDelay )
 {	
-	Serial.print(" --- neededUptimeForCompensate = ");
-	Serial.println(neededUptimeForCompensate);
+//	displayMsg(" --- neededUptimeForCompensate = ");
+	displayMsg("tComp", neededUptimeForCompensate);
 	
 	// evenly distribute needed uptime						
 	if (neededUptimeForCompensate >= regDelay) 
@@ -1265,10 +1427,12 @@ void SetPulseDurationsForREgulation(unsigned long neededUptimeForCompensate, uns
 		// store that we have good parameters for this temperature
 		parametersRegulationSetForTemp = targetTemp;
 		
-		Serial.print("durationOffPulse = ");
-		Serial.print(durationOffPulse);
-		Serial.print("   durationOnPulse = ");
-		Serial.println(durationOnPulse);	
+//		displayMsg("durationOffPulse = ");
+		displayMsg("dOffPls", durationOffPulse);
+                delay(500);
+//		displayMsg("   durationOnPulse = ");
+		displayMsg("dOnPls", durationOnPulse);	
+                delay(500);
 	}
 }
 // 
@@ -1339,108 +1503,214 @@ bool IsAcceleratingFall()
 }
 
 
+// JC: tmp35
+
+double getPinTempC(int analogPin)
+{
+  // Prime the channel for reading
+  analogRead(analogPin);   
+  delay(100);
+
+  // http://forum.arduino.cc/index.php?PHPSESSID=139drbnl9qibihflm36uhh17u7&topic=6261.15
+  // Do the actual read
+  int sensorValue = analogRead(analogPin);   
+  //  return sensorValue;
+
+  //  int tempHundred = map(sensorValue, 0, 1024, 0, 500);
+  //  double tempC = tempHundred / 100.0;
+  double tempC = sensorValue * 1.0 / 1024.0 * 5.00 * 100; // Needs a very steady 5.00V power supply to prevent temp readings from bouncing all over.
+  return tempC;
+
+}
+
+
+double getWaterTempC()
+{
+  //    if (millis() % 2000 > 1000) {
+  previousWaterTemp = getPinTempC(WATER_PIN);
+  displayActualTemp(previousWaterTemp);
+
+  return previousWaterTemp;
+}
+
+
+
+double getHeaterTempC()
+{
+  previousHeaterTemp = getPinTempC(HEATER_PIN);
+  displayHeaterTemp(previousHeaterTemp);
+        
+  return previousHeaterTemp;
+}
+
+
+// JC: Relay
+//void relayOn()
+//{
+//  if (CurrentHeaterTemp > SHUTDOWN_TEMP + 5) {
+//    relayOff(); // Extra Sanity Check
+//  } 
+//  else {
+//    digitalWrite(RELAY_OUT_PIN,HIGH);
+//    lcd.setCursor(15,1);
+//    lcd.print("!");
+//    heaterOn = HIGH;
+//  }
+//}
+//void relayOff()
+//{
+//  digitalWrite(RELAY_OUT_PIN,LOW);
+//  lcd.setCursor(15,1);
+//  lcd.print(".");
+//  heaterOn = LOW;
+//}
+
+
 // ------------------------- 7-SEGMENT UTILITIES
-
-void printNumber(int wholePart, int decimalPart, boolean showDecimal, int displayAddress, int displaySide, boolean forceLowerRight) {
-    int ones;
-    int tens;
-    int hundreds;
-    int tenths;
-    int n = wholePart;  
-    // Erase and exit if wholePart does not fit
-    if (wholePart > 999) {
-        eraseDisplay(displayAddress, displaySide);
-        return;
-    }  
-      
-    // Manage ShowDecimal Case 
-    if (showDecimal && decimalPart < 10){
-      tenths = decimalPart;        
-    } else {
-      showDecimal = false;
-    }
-      
-    // Compute individual digits
-    ones= (int) (n%10);
-    n=n/10;
-    tens= (int) (n%10);
-    n=n/10;
-    hundreds= (int) n;			
-    
-    
-    // Print the number digit by digit (do not print leading zeroes)
-    if (showDecimal)
-    {
-      // ex : 153.2
-      if (wholePart > 99)     {
-        lc.setDigit(displayAddress,abs(REVERSE_DISPLAY-(displaySide+3)),(byte)hundreds,false);
-      } else {
-        eraseDigit(displayAddress,displaySide,3);
-      }
-      if (wholePart > 9)      
-      { 
-        lc.setDigit(displayAddress,abs(REVERSE_DISPLAY-(displaySide+2)),(byte)tens,false);
-      }else {
-        eraseDigit(displayAddress,displaySide,2);
-      }      
-      lc.setDigit(displayAddress,abs(REVERSE_DISPLAY-(displaySide+1)),(byte)ones,true);
-      lc.setDigit(displayAddress,abs(REVERSE_DISPLAY-displaySide),(byte)tenths,forceLowerRight);
-    } 
-    else
-    { 
-      // ex :  946
-      lc.setDigit(displayAddress,abs(REVERSE_DISPLAY-(displaySide+3)),' ',false);
-      if (wholePart > 99)     {
-        lc.setDigit(displayAddress,abs(REVERSE_DISPLAY-(displaySide+2)),(byte)hundreds,false);
-      } else {   
-        eraseDigit(displayAddress,displaySide,2);
-      }
-      if (wholePart > 9)      {
-        lc.setDigit(displayAddress,abs(REVERSE_DISPLAY-(displaySide+1)),(byte)tens,false);
-      } else {
-        eraseDigit(displayAddress,displaySide,1);
-      }
-      lc.setDigit(displayAddress,abs(REVERSE_DISPLAY-displaySide),(byte)ones,forceLowerRight);
-    }
-}
-
-void eraseDigit(int displayAddress, int displaySide, int digitIndex) {
-    lc.setChar(displayAddress,abs(REVERSE_DISPLAY-(displaySide+digitIndex)),' ',false);
-}
-
-void eraseDisplay(int displayAddress, int displaySide) {       
-    // Erase the 4-digit
-    eraseDigit(displayAddress,displaySide,0);
-    eraseDigit(displayAddress,displaySide,1);
-    eraseDigit(displayAddress,displaySide,2);
-    eraseDigit(displayAddress,displaySide,3);
-}
-
-void eraseDisplay(int displayAddress) {       
-    // Erase the 2 sides of display
-    eraseDisplay(displayAddress, DISPLAY_LEFT);
-    eraseDisplay(displayAddress, DISPLAY_RIGHT);
-}
+//
+//void printNumber(int wholePart, int decimalPart, boolean showDecimal, int displayAddress, int displaySide, boolean forceLowerRight) {
+//    int ones;
+//    int tens;
+//    int hundreds;
+//    int tenths;
+//    int n = wholePart;  
+//    // Erase and exit if wholePart does not fit
+//    if (wholePart > 999) {
+//        eraseDisplay(displayAddress, displaySide);
+//        return;
+//    }  
+//      
+//    // Manage ShowDecimal Case 
+//    if (showDecimal && decimalPart < 10){
+//      tenths = decimalPart;        
+//    } else {
+//      showDecimal = false;
+//    }
+//      
+//    // Compute individual digits
+//    ones= (int) (n%10);
+//    n=n/10;
+//    tens= (int) (n%10);
+//    n=n/10;
+//    hundreds= (int) n;			
+//    
+//    
+//    // Print the number digit by digit (do not print leading zeroes)
+//    if (showDecimal)
+//    {
+//      // ex : 153.2
+//      if (wholePart > 99)     {
+//        lc.setDigit(displayAddress,abs(REVERSE_DISPLAY-(displaySide+3)),(byte)hundreds,false);
+//      } else {
+//        eraseDigit(displayAddress,displaySide,3);
+//      }
+//      if (wholePart > 9)      
+//      { 
+//        lc.setDigit(displayAddress,abs(REVERSE_DISPLAY-(displaySide+2)),(byte)tens,false);
+//      }else {
+//        eraseDigit(displayAddress,displaySide,2);
+//      }      
+//      lc.setDigit(displayAddress,abs(REVERSE_DISPLAY-(displaySide+1)),(byte)ones,true);
+//      lc.setDigit(displayAddress,abs(REVERSE_DISPLAY-displaySide),(byte)tenths,forceLowerRight);
+//    } 
+//    else
+//    { 
+//      // ex :  946
+//      lc.setDigit(displayAddress,abs(REVERSE_DISPLAY-(displaySide+3)),' ',false);
+//      if (wholePart > 99)     {
+//        lc.setDigit(displayAddress,abs(REVERSE_DISPLAY-(displaySide+2)),(byte)hundreds,false);
+//      } else {   
+//        eraseDigit(displayAddress,displaySide,2);
+//      }
+//      if (wholePart > 9)      {
+//        lc.setDigit(displayAddress,abs(REVERSE_DISPLAY-(displaySide+1)),(byte)tens,false);
+//      } else {
+//        eraseDigit(displayAddress,displaySide,1);
+//      }
+//      lc.setDigit(displayAddress,abs(REVERSE_DISPLAY-displaySide),(byte)ones,forceLowerRight);
+//    }
+//}
+//
+//void eraseDigit(int displayAddress, int displaySide, int digitIndex) {
+//    lc.setChar(displayAddress,abs(REVERSE_DISPLAY-(displaySide+digitIndex)),' ',false);
+//}
+//
+//void eraseDisplay(int displayAddress, int displaySide) {       
+//    // Erase the 4-digit
+//    eraseDigit(displayAddress,displaySide,0);
+//    eraseDigit(displayAddress,displaySide,1);
+//    eraseDigit(displayAddress,displaySide,2);
+//    eraseDigit(displayAddress,displaySide,3);
+//}
+//
+//void eraseDisplay(int displayAddress) {       
+//    // Erase the 2 sides of display
+//    eraseDisplay(displayAddress, DISPLAY_LEFT);
+//    eraseDisplay(displayAddress, DISPLAY_RIGHT);
+//}
+//
+//void eraseDisplay() {       
+//    // Erase all displays
+//    for(int index=0;index<lc.getDeviceCount();index++) {
+//      eraseDisplay(index);
+//    }
+//}
 
 void eraseDisplay() {       
-    // Erase all displays
-    for(int index=0;index<lc.getDeviceCount();index++) {
-      eraseDisplay(index);
-    }
+    lcd.clear();
+}
+
+void displayMsg(char *msg) {
+    lcd.setCursor(0,0);
+    lcd.print("                 ");
+    lcd.setCursor(0,0);
+    lcd.print(msg);
+}
+
+void displayMsg(char *prefix, double d) {
+    lcd.setCursor(0,0);
+    lcd.print("                 ");
+    lcd.setCursor(0,0);
+    lcd.print(prefix);
+    lcd.setCursor(8,0);
+    lcd.print(d);
 }
 
 void displayTemp(float temp, int side)
 { 
-  boolean showDecimal = true;
-    
-  int decimalPart = (int) (((int)(temp * 100)) % 100); 
-  int tenths = decimalPart / 10;
+//  boolean showDecimal = true;
+//    
+//  int decimalPart = (int) (((int)(temp * 100)) % 100); 
+//  int tenths = decimalPart / 10;
+//  
+//  int hundredths =  decimalPart % 10;
+//  if (hundredths > 5) 
+//  tenths = tenths + 1 ; // round to closest digit
   
-  int hundredths =  decimalPart % 10;
-  if (hundredths > 5) 
-  tenths = tenths + 1 ; // round to closest digit
+  int temp10 = temp * 10;
+  double tempdot10 = temp10/10.0;
   
-  printNumber((int) temp, tenths, showDecimal, TEMP_DISPLAY_DRIVER, side, false);
+//  printNumber((int) temp, tenths, showDecimal, TEMP_DISPLAY_DRIVER, side, false);
+  if (side == DISPLAY_LEFT) {
+    lcd.setCursor(0,1);
+    lcd.print(tempdot10);
+    lcd.setCursor(4,1);
+    lcd.write(1);
+  }
+  if (side == DISPLAY_CENTER) {
+    lcd.setCursor(5,1);
+    lcd.print(tempdot10);
+    lcd.setCursor(9,1);
+    lcd.write(1);
+  }
+  if (side == DISPLAY_RIGHT) {
+    lcd.setCursor(10,1);
+    lcd.print(tempdot10);
+    lcd.setCursor(12,1);
+    lcd.write(1);
+    lcd.setCursor(13,1);
+    lcd.print("  ");
+  }
 }
 
 void displayActualTemp(float temp)
@@ -1449,18 +1719,21 @@ void displayActualTemp(float temp)
 }
 void displayTargetTemp(float temp)
 {
+  displayTemp(temp, DISPLAY_CENTER);
+}
+void displayHeaterTemp(float temp)
+{
   displayTemp(temp, DISPLAY_RIGHT);
 }
-
 
 // ------------------------- other UTILITIES
 
 void soundAlarm()
 {
-  //Serial.println("ALERT");
+  //displayMsg("ALERT");
   for(int index=0;index<3;index++) {
     tone(PIEZO_PIN, 650, 1000);
-    //Serial.println("BIIP");
+    //displayMsg("BIIP");
     delay(2000);
   }  
 }
@@ -1479,6 +1752,7 @@ float getTemperature()
 {
   // plan next measurement
   tGetTemperatureSample = millis() + SAMPLE_DELAY;
-  sensors.requestTemperaturesByIndex(0); // Send the command to get temperatures
-  return sensors.getTempC(tempProbeAddress);
+//  sensors.requestTemperaturesByIndex(0); // Send the command to get temperatures
+//  return sensors.getTempC(tempProbeAddress);
+  return getWaterTempC();
 }
