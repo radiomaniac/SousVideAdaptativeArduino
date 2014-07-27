@@ -1,11 +1,18 @@
-SousVideAdaptativeArduino
-=========================
+SousVideAdaptativeArduino - Adapted for Rice Cookers
+====================================================
 
 Adaptative regulation sous-vide cooker algorithm (for arduino)
 
 For more info, refer to :
 
 http://www.instructables.com/id/Cheap-and-effective-Sous-Vide-cooker-Arduino-power/
+
+
+Rice Cooker Note
+=========================
+Made changes for rice cooker which doesn't have a heating coil in the water
+Using a 2x16 LCD rather than 7 Segment display
+Using a TMP36 rather than 1 Wire temp sensor (for now...)
 
 
 Intro
