@@ -21,6 +21,19 @@
 *     - allows target temperature only in the safe 50°c to 90°C range 
 *  - Dead cheap and simple : no expensive LCD or Solid State Relay
 *
+*  Updates 2014-07-27
+*
+*   Switched support of LED Matrix -> 2x16 LCD (still cheap enough)
+*       Since we have an LCD
+*           On Line 0 print: Debug String, Debug Double, opState
+*           On Line 1 print: Water Temp, Goal Temp, Heater Temp
+*   Use a TMP36 rather than 1 wire sensor (but TMP36 fluctuates a lot so... trying to source a 1 wire sensor)
+*   Since rice cookers heat slowly and cool slowly (due to external heater, and lots of metal that retains heat), we have a huge lag between heater + water temperature change:
+*       Added a safety to ensure that heater doesn't blow a thermal fuse during ramp up, waiting for water to change temperature (which it doesn't)
+*       No sense in slowly increasing temperature until just 65%, just ramp it all the way to 90%
+*       Make heater always within a few degrees of targetTemp especially.  We can do this by monitoring the heater temperature which has a faster and larger response to heating.
+*       Prevent heater from getting much hotter than water since targetTemp will be overshot a lot due to residual heat in heater
+*       TODO: Probably need to keep the heater 2-5 degrees hotter than the targetTemp just to keep heat going in.
 */
 #include <LiquidCrystal.h>
 LiquidCrystal lcd(2, 4, 5, 6, 7, 8);
