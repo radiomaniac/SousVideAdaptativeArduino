@@ -344,7 +344,7 @@ void loop() {
   lcd.setCursor(0, 0);
   lcd.print("R:");
   lcd.setCursor(2, 0);
-  int seconds = tcurrent / 100;
+  long seconds = tcurrent / 1000;
   lcd.print(seconds, DEC);
     
 
@@ -399,7 +399,7 @@ void loop() {
 #define MIN_HEATER_LEAD 1
 #define MAX_HEATER_LEAD 20
 
-boolean percentHeaterOn() {
+int percentHeaterOn() {
   int result = 0;
   
   // WAY TOO COLD
@@ -412,18 +412,24 @@ boolean percentHeaterOn() {
   // TOO HOT
   else if (waterTemp > targetWaterTemp) 
   {
-    // Don't turn of if water is overtemp, unless heater is behind:
-    if (heaterTemp < targetWaterTemp)
-    {
-      // Don't let the heater fall below targetWaterTemp
-      
-      // TODO: Calculate rate of heaterFall to determine result duty cycle
-      result = 20;  
-    }
-    else 
-    {
+    if (waterTemp < targetWaterTemp + 1.0) {
+
+      // Don't turn of if water is overtemp, unless heater is behind:
+      if (heaterTemp < targetWaterTemp)
+      {
+        // Don't let the heater fall below targetWaterTemp
+        double percentAllowableLagHeat = 1.0 - (waterTemp - targetWaterTemp);
+        result = 20 * percentAllowableLagHeat;  
+      }
+      else 
+      {
+        result = 0;
+      }
+    } else {
+      // At this point too far over target, it is unacceptable to continue heating 
       result = 0;
-    }
+    } 
+    
   }
   
   // A LITTLE TOO COLD
