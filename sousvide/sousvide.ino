@@ -40,6 +40,13 @@
 *       Prevent heater from getting much hotter than water since targetTemp will be overshot a lot due to residual heat in heater
 *       TODO: Probably need to keep the heater 2-5 degrees hotter than the targetTemp just to keep heat going in.
 */
+
+// ------------------------- LIBRARIES
+#include <LedControl.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
+
+
 #include <LiquidCrystal.h>
 LiquidCrystal lcd(2, 4, 5, 6, 7, 8);
 
@@ -100,10 +107,6 @@ byte degree[8] = // define the degree symbol
 // 8 digit LED display  LOAD on pin 10 
 
 
-// ------------------------- LIBRARIES
-#include <LedControl.h>
-#include <OneWire.h>
-#include <DallasTemperature.h>
 
 
 // ------------------------- CONSTANTS
@@ -138,13 +141,15 @@ byte degree[8] = // define the degree symbol
 #define PIEZO_PIN 13
 
 // temperature sensor
-//#define ONE_WIRE_BUS 9
-#define TEMPERATURE_PRECISION 9
-#define SAMPLE_DELAY 5000
+#define ONE_WIRE_BUS 1
+#define TEMPERATURE_PRECISION 12
+#define SAMPLE_DELAY 500  // Set to 5000 for tmp35 since it fluctuates rapidly, otherwise 500 for more stable DS18B20
 #define OUTPUT_TO_SERIAL true
 
 // relay
 #define RELAY_OUT_PIN 3
+#define RELAY_OUT_PIN_ON LOW
+#define RELAY_OUT_PIN_OFF HIGH
 
 
 // First Ramp
@@ -256,11 +261,11 @@ unsigned long  tCheckNotHeatingWildly;
 */
 //LedControl lc=LedControl(12,11,10,1);
 //// Set up a oneWire instance and Dallas temperature sensor
-//OneWire oneWire(ONE_WIRE_BUS);
-//DallasTemperature sensors(&oneWire);	
+OneWire oneWire(ONE_WIRE_BUS);
+DallasTemperature sensors(&oneWire);	
 //// variable to store temperature probe address
-//DeviceAddress tempProbeAddress; 
-
+// arrays to hold device addresses
+DeviceAddress waterThermometer, heaterThermometer;
 
 
 void turnOffRelay(char reason)
@@ -278,7 +283,7 @@ void turnOffRelay(char reason)
   {
     lcd.setCursor(15,1);
     lcd.print("h");
-    digitalWrite(RELAY_OUT_PIN,HIGH);
+    digitalWrite(RELAY_OUT_PIN,RELAY_OUT_PIN_ON);
     // But still pretend we are off, so set no other variables.
   }
   else
@@ -286,7 +291,7 @@ void turnOffRelay(char reason)
     lcd.setCursor(15,1);   
     lcd.print(".");
   
-    digitalWrite(RELAY_OUT_PIN,LOW);
+    digitalWrite(RELAY_OUT_PIN,RELAY_OUT_PIN_OFF);
     tLastTurnOffRelay = millis();
     tCheckNotHeatingWildly = 0;
     isHeatOn = false;
@@ -349,7 +354,7 @@ void turnOnRelay()
   } else {
     lcd.setCursor(15,1);
     lcd.print("+");
-    digitalWrite(RELAY_OUT_PIN,HIGH);
+    digitalWrite(RELAY_OUT_PIN,RELAY_OUT_PIN_ON);
     tCheckNotHeatingWildly = millis() + ((unsigned long)60000 * MAX_HEATINGTIME_NO_TEMP_CHANGE_MINUTES);
   //  displayMsg("tCheckNotHeatingWildly =");
     displayMsg("wild?", tCheckNotHeatingWildly);
@@ -358,13 +363,27 @@ void turnOnRelay()
   }
 }
     
+float ds18b20Temperature(DeviceAddress deviceAddress)
+{
+    float tempC = sensors.getTempC(deviceAddress);
+    return tempC;
+}
 
+float waterTemperature()
+{
+  return ds18b20Temperature(waterThermometer);
+}
+float heaterTemperature()
+{
+  return ds18b20Temperature(heaterThermometer);
+}
 
 // ------------------------- SETUP
 
 void setup() {
+sensors.begin();
 
-	Serial.begin(9600); 
+//	Serial.begin(9600); 
 	/*
 	Initialize MAX7219 display driver
 	*/
@@ -380,10 +399,21 @@ void setup() {
   lcd.setCursor(0, 1);
   lcd.print(F("   Rice Vide!"));
 
-  delay(400);  // Splash screen
+  delay(1000);  // Splash screen
   
-  
+  lcd.setCursor(0, 0);
+  lcd.print(F("Sensor Count..."));
+  lcd.setCursor(0, 1);
+  lcd.print(sensors.getDeviceCount());
 
+  delay(400);  // Splash screen
+
+  if (!sensors.getAddress(waterThermometer, 0)) Serial.println("Unable to find address for Device 0"); 
+  if (!sensors.getAddress(heaterThermometer, 1)) Serial.println("Unable to find address for Device 1"); 
+  
+  sensors.setResolution(waterThermometer, TEMPERATURE_PRECISION);
+  sensors.setResolution(heaterThermometer, TEMPERATURE_PRECISION);
+  
 	/*
 	Initialize pushButtons
 	*/
@@ -392,12 +422,14 @@ void setup() {
 	/*
 	Initialize temperature sensor
 	*/
-//	sensors.begin();
-//	delay(1000);   
-//	sensors.getAddress(tempProbeAddress, 0);  
-//	delay(1000);   
-//	sensors.requestTemperaturesByIndex(0); // Send the command to get temperatures
-//	delay(1000);
+	sensors.begin();
+	delay(1000);   
+	sensors.getAddress(waterThermometer, 0);  
+	delay(1000);   
+	sensors.getAddress(heaterThermometer, 1);  
+	delay(1000);   
+	sensors.requestTemperaturesByIndex(0); // Send the command to get temperatures
+	delay(1000);
 	/*
 	Read temperature
 	*/
@@ -414,7 +446,7 @@ void setup() {
         
 	//prepare Relay port for writing
 	pinMode(RELAY_OUT_PIN, OUTPUT);  
-	digitalWrite(RELAY_OUT_PIN,LOW);
+	digitalWrite(RELAY_OUT_PIN,RELAY_OUT_PIN_OFF);
 
 	tcurrent = millis();
 	maxUptimeMillis = MAX_UPTIME_HOURS * (unsigned long)3600 * (unsigned long)1000;
@@ -436,6 +468,8 @@ void setup() {
 
 
 void loop() {   
+  sensors.requestTemperatures();
+
       
   tcurrent = millis();
 
@@ -734,7 +768,7 @@ void Regulate()
 			}
 			// We already have ON and OFF durations
 			// perform regulation
-			if (digitalRead(RELAY_OUT_PIN) == LOW) {
+			if (digitalRead(RELAY_OUT_PIN) == RELAY_OUT_PIN_OFF) {
 				// check if downtime over
 				if ( (long) (millis() - tBackToHigh) >= 0)
 				{
@@ -1098,7 +1132,7 @@ void PerformBoostTemp()
 		}		 
    } else {  
 		// switch ON heat and wait for tBackToLow
-		 if (digitalRead(RELAY_OUT_PIN) == LOW) {
+		 if (digitalRead(RELAY_OUT_PIN) == RELAY_OUT_PIN_OFF) {
 		   turnOnRelay();
 		 }	 		 
 		 
@@ -1240,7 +1274,7 @@ void PerformFirstRamp()
     if (actualTemp > firstRampCutOffTemp) 
     {
 		// switch off heat and wait for stabilization
-       if (digitalRead(RELAY_OUT_PIN) == HIGH) {
+       if (digitalRead(RELAY_OUT_PIN) == RELAY_OUT_PIN_ON) {
 //         displayMsg("STOP at actualTemp = ");
          displayMsg("rmp1stop", actualTemp);
          turnOffRelay();  
@@ -1257,7 +1291,7 @@ void PerformFirstRamp()
        }        
     } else {
       // heat fullsteam ahead
-       if (digitalRead(RELAY_OUT_PIN) == LOW)     turnOnRelay();
+       if (digitalRead(RELAY_OUT_PIN) == RELAY_OUT_PIN_OFF)     turnOnRelay();
        
        // try to find how much time is needed for system to react to heat
        if (((long) (millis() - tCheckTakeOff) >= 0) && (tOperationalDelay == 0))
@@ -1357,7 +1391,7 @@ void checkShutdownConditions(){
 
 void shutdownDevice() 
 {
-   digitalWrite(RELAY_OUT_PIN,LOW);
+   digitalWrite(RELAY_OUT_PIN,RELAY_OUT_PIN_OFF);
    isHeatOn = false;
 
 //    eraseDisplay();
@@ -1544,8 +1578,8 @@ double getPinTempC(int analogPin)
 
 double getWaterTempC()
 {
-  //    if (millis() % 2000 > 1000) {
-  previousWaterTemp = getPinTempC(WATER_PIN);
+//  previousWaterTemp = getPinTempC(WATER_PIN);
+  previousWaterTemp = waterTemperature();
   displayActualTemp(previousWaterTemp);
 
   return previousWaterTemp;
@@ -1555,7 +1589,9 @@ double getWaterTempC()
 
 double getHeaterTempC()
 {
-  previousHeaterTemp = getPinTempC(HEATER_PIN);
+//  previousHeaterTemp = getPinTempC(HEATER_PIN);
+  previousHeaterTemp = heaterTemperature();
+
   displayHeaterTemp(previousHeaterTemp);
         
   return previousHeaterTemp;
@@ -1569,7 +1605,7 @@ double getHeaterTempC()
 //    relayOff(); // Extra Sanity Check
 //  } 
 //  else {
-//    digitalWrite(RELAY_OUT_PIN,HIGH);
+//    digitalWrite(RELAY_OUT_PIN,RELAY_OUT_PIN_ON);
 //    lcd.setCursor(15,1);
 //    lcd.print("!");
 //    heaterOn = HIGH;
@@ -1577,7 +1613,7 @@ double getHeaterTempC()
 //}
 //void relayOff()
 //{
-//  digitalWrite(RELAY_OUT_PIN,LOW);
+//  digitalWrite(RELAY_OUT_PIN,RELAY_OUT_PIN_OFF);
 //  lcd.setCursor(15,1);
 //  lcd.print(".");
 //  heaterOn = LOW;
