@@ -406,7 +406,7 @@ int percentHeaterOn() {
   if (waterTemp < targetWaterTemp - BOOST_UNTIL_DELTA)
   {
     // Boost until waterTemp is close
-    result = 100;
+    result = 75;
   } 
   
   // TOO HOT
@@ -449,6 +449,7 @@ int percentHeaterOn() {
       result = percentBoostNeeded * 100;
       
       if (result < 30) result = 30;
+      if (result > 75) result = 75;
     } 
     else 
     {
