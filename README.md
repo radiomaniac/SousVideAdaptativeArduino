@@ -1,9 +1,9 @@
-SousVideAdaptativeArduino - Adapted for Rice Cookers
+SousVideAdaptativeArduino - Adapted for Rice Cookers - Adapted to work with Adafruit's RGB LCD shield (work in progress)
 ====================================================
 
 Adaptative regulation sous-vide cooker algorithm (for arduino)
 
-For more info, refer to :
+For more info about the original project, refer to :
 
 http://www.instructables.com/id/Cheap-and-effective-Sous-Vide-cooker-Arduino-power/
 
@@ -12,7 +12,7 @@ Rice Cooker Note
 =========================
 Made changes for rice cooker which doesn't have a heating coil in the water
 Using a 2x16 LCD rather than 7 Segment display
-Using a TMP36 rather than 1 Wire temp sensor (for now...)
+Using a DS18S20 sensor (can't get it to work)
 
 
 Intro
