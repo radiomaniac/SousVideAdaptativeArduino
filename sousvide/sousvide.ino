@@ -18,16 +18,38 @@
 *     - automatic cut-off after 5 minutes of continuous heating providing no change in temperature
 *     - automatic cut-off after 24 hours of operation
 *     - automatic cut-off when temperature reaches 95 °C
-*     - allows target temperature only in the safe 50°c to 90°C range 
+*     - allows target temperature only in the safe 30°c to 90°C range 
 *  - Dead cheap and simple : no expensive LCD or Solid State Relay
+*  
+*  // ------------------------- PARTS NEEDED
+
+// Arduino board
+// Adafruit RGB LCD SHIELD
+// Pushbutton x 2
+// Piezo element 
+// Waterproof DS18B20 Digital temperature sensor
+// 4.7K ohm resistor 
+// 5V Relay module for Arduino, capable to drive AC125/250V at 10A
+// Rice Cooker
+
+// ------------------------- PIN LAYOUT
+//
+// inputs
+// Pushbutton + on pin 6 with INPUT_PULLUP mode
+// Pushbutton - on pin 5 with INPUT_PULLUP mode
+// Temperature sensor on pin 9 (data pin of OneWire sensor)
+
+// outputs
+// Relay on pin 8
+// Speaker (piezo) on pin 13
+ 
 *
-*  Updates 2014-07-27
+*  Updates 2014-07-27 by pctj101
 *
 *   Switched support of LED Matrix -> 2x16 LCD (still cheap enough)
 *       Since we have an LCD
 *           On Line 0 print: Debug String, Debug Double, opState
 *           On Line 1 print: Water Temp, Goal Temp, Heater Temp
-*   Use a TMP36 rather than 1 wire sensor (but TMP36 fluctuates a lot so... trying to source a 1 wire sensor)
 *   Since rice cookers heat slowly and cool slowly (due to external heater, and lots of metal that retains heat), we have a huge lag between heater + water temperature change:
 *       Added a safety to ensure that heater doesn't blow a thermal fuse during ramp up, waiting for water to change temperature (which it doesn't)
 *       No sense in slowly increasing temperature until just 65%, just ramp it all the way to 90%
@@ -39,22 +61,37 @@
 *               Heater element when a little hotter than water still heats water.  So don't leave the heater on until it's 50C over the water since then water can't stop heating.
 *       Prevent heater from getting much hotter than water since targetWaterTemp will be overshot a lot due to residual heat in heater
 *       TODO: Probably need to keep the heater 2-5 degrees hotter than the targetWaterTemp just to keep heat going in.
+*       
+*  Updates 2020-06-19 by Radiomaniac
+*       
+*       Removed "Liquidcrystal lcd(etc.);" line
+*       Substituted liquidcrystal library for Adafruit's RGB LCD shield library and added wire.h too as it looks like it's needed for it to work.
+*       Uncommented "Adafruit_RGBLCDShield lcd = Adafruit_RGBLCDShield();"
+*       Changed the backlight color to "RED" to enable monochrome display's white light to work.
+*       Changed the minimum temperature from 50 to 30 to be able to make yogurt for example (37ºC needed)
+*       Moved the "Parts needed" and "Pin layout" information higher up
+*       Changed "8 digits led display" to "Adafruit RGB LCD SHIELD" in "Parts needed".
+*       Removed code and or comments that have to do with the 7 segment display
+*
+*	TODO: 
+		For some reason the sensor DS18B20 doesn't work (yellow on pin 9 with 4.7k resistor going to 5v. Red to 5v, black to GND.)
+		Buttons on the shield don't work
+		Previously mentioned "Probably need to keep the heater 2-5 degrees hotter than the targetWaterTemp just to keep heat going in."
 */
 
-// ------------------------- LIBRARIES
-#include <LedControl.h>
+// Libraries for the DS18B20 Temperature Sensor
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
-
-#include <LiquidCrystal.h>
-LiquidCrystal lcd(2, 4, 5, 6, 7, 8);
+// Libraries for the Adafruit RGB/LCD Shield
+#include <Adafruit_RGBLCDShield.h>
+#include <Wire.h>
 
 // ************************************************
 // DiSplay Variables and constants
 // ************************************************
 
-//Adafruit_RGBLCDShield lcd = Adafruit_RGBLCDShield();
+Adafruit_RGBLCDShield lcd = Adafruit_RGBLCDShield();
 // These #defines make it easy to set the backlight color
 #define RED 0x1
 #define YELLOW 0x3
@@ -78,35 +115,6 @@ byte degree[8] = // define the degree symbol
   B00000, 
   B00000 
 }; 
-
-
-
-// ------------------------- PARTS NEEDED
-
-// Arduino board
-// integrated 8 digits led display with MAX7219 control module (3 wire interface) 
-// Pushbutton x 2
-// Piezo element 
-// Waterproof DS18B20 Digital temperature sensor
-// 4.7K ohm resistor 
-// 5V Relay module for Arduino, capable to drive AC125/250V at 10A
-// Rice Cooker
-
-// ------------------------- PIN LAYOUT
-//
-// inputs
-// Pushbutton + on pin 6 with INPUT_PULLUP mode
-// Pushbutton - on pin 5 with INPUT_PULLUP mode
-// Temperature sensor on pin 9 (data pin of OneWire sensor)
-
-// outputs
-// Relay on pin 8
-// Speaker (piezo) on pin 13
-// 8 digit LED display  DataIn on pin 12 
-// 8 digit LED display  CLK on pin 11 
-// 8 digit LED display  LOAD on pin 10 
-
-
 
 
 // ------------------------- CONSTANTS
@@ -156,7 +164,7 @@ byte degree[8] = // define the degree symbol
 #define FIRST_RAMP_CUTOFF_RATIO 0.90
 
 // Security features
-#define MIN_TARGET_TEMP 50   /*sufficient for most sous-vide recipes*/
+#define MIN_TARGET_TEMP 30   /*sufficient for most sous-vide recipes*/
 #define MAX_TARGET_TEMP 90   /*sufficient for most sous-vide recipes*/
 #define SHUTDOWN_TEMP 95   /*shutdown if temp reaches that temp*/
 #define MAX_UPTIME_HOURS 24   /*shutdown after 24 hours of operation*/
@@ -197,19 +205,9 @@ unsigned long nextSensorUpdateTime = 0;
 #define TOTAL_DUTY_DURATION 10000
 unsigned long nextButtonReadTime = 0;
 
-// 7-segment and sensor variables
-
-/*
- LedControl :
- pin 12 is connected to the DataIn 
- pin 11 is connected to the CLK 
- pin 10 is connected to LOAD 
- We have 1 MAX7219.
-*/
-//LedControl lc=LedControl(12,11,10,1);
 //// Set up a oneWire instance and Dallas temperature sensor
 OneWire oneWire(ONE_WIRE_BUS);
-DallasTemperature sensors(&oneWire);	
+DallasTemperature sensors(&oneWire);  
 //// variable to store temperature probe address
 // arrays to hold device addresses
 DeviceAddress waterThermometer, heaterThermometer;
@@ -272,7 +270,7 @@ sensors.begin();
   lcd.begin(16, 2);
   lcd.createChar(1, degree); // create degree symbol from the binary
 
-  //   lcd.setBacklight(VIOLET);
+  //   lcd.setBacklight(RED);
   lcd.setCursor(0, 0);
   lcd.print(F("    Booting..."));
   lcd.setCursor(0, 1);
@@ -293,30 +291,30 @@ sensors.begin();
   sensors.setResolution(waterThermometer, TEMPERATURE_PRECISION);
   sensors.setResolution(heaterThermometer, TEMPERATURE_PRECISION);
   
-	/*
-	Initialize pushButtons
-	*/
-	pinMode(BT_TEMP_MORE_PIN, INPUT_PULLUP);
-	pinMode(BT_TEMP_LESS_PIN, INPUT_PULLUP);
+  /*
+  Initialize pushButtons
+  */
+  pinMode(BT_TEMP_MORE_PIN, INPUT_PULLUP);
+  pinMode(BT_TEMP_LESS_PIN, INPUT_PULLUP);
 
 
-	//prepare Relay port for writing 
-	pinMode(RELAY_OUT_PIN, OUTPUT);  
-	digitalWrite(RELAY_OUT_PIN,RELAY_OUT_PIN_OFF);
+  //prepare Relay port for writing 
+  pinMode(RELAY_OUT_PIN, OUTPUT);  
+  digitalWrite(RELAY_OUT_PIN,RELAY_OUT_PIN_OFF);
 
-	/*
-	Initialize temperature sensor
-	*/
-	sensors.begin();
-	sensors.getAddress(waterThermometer, 0);  
-	sensors.getAddress(heaterThermometer, 1);  
+  /*
+  Initialize temperature sensor
+  */
+  sensors.begin();
+  sensors.getAddress(waterThermometer, 0);  
+  sensors.getAddress(heaterThermometer, 1);  
         sensors.requestTemperatures();
-	delay(1000);
+  delay(1000);
 
         waterTemp = getWaterTempC();
-	targetWaterTemp = (long) ((int)waterTemp);
+  targetWaterTemp = (long) ((int)waterTemp);
      
-	maxUptimeMillis = MAX_UPTIME_HOURS * (unsigned long)3600 * (unsigned long)1000;
+  maxUptimeMillis = MAX_UPTIME_HOURS * (unsigned long)3600 * (unsigned long)1000;
 
 turnOffRelay();
 
@@ -666,5 +664,3 @@ void soundAlarm()
     delay(2000);
   }  
 }
-
-
