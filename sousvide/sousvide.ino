@@ -148,8 +148,10 @@ byte degree[8] = // define the degree symbol
 // piezo
 #define PIEZO_PIN 13
 
-// temperature sensor
-#define ONE_WIRE_BUS 1
+// temperature sensor and its pinout
+#define ONE_WIRE_BUS 2 // White or yellow cable to D2
+#define ONE_WIRE_PWR 3 // Red cable to D3
+#define ONE_WIRE_GND 4 // Black cable to GND or D4
 #define TEMPERATURE_PRECISION 12
 #define SAMPLE_DELAY 500  // Set to 5000 for tmp35 since it fluctuates rapidly, otherwise 500 for more stable DS18B20
 #define OUTPUT_TO_SERIAL true
