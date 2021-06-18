@@ -11,7 +11,7 @@ http://www.instructables.com/id/Cheap-and-effective-Sous-Vide-cooker-Arduino-pow
 Rice Cooker Note
 =========================
 Made changes for rice cooker which doesn't have a heating coil in the water
-Using a 2x16 LCD rather than 7 Segment display
+Using a 2x16 LCD rather than 7 Segment display.
 Using a DS18S20 sensor (can't get it to work)
 
 
