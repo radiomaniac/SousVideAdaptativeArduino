@@ -37,7 +37,7 @@
 // Inputs
 // Pushbutton + on pin 12 with INPUT_PULLUP mode
 // Pushbutton - on pin 11 with INPUT_PULLUP mode
-// Temperature sensor on pin 9 (data pin of OneWire sensor)
+// Temperature sensor on pin 3 (data pin of OneWire sensor)
 //
 // Outputs
 // Relay on pin 3
