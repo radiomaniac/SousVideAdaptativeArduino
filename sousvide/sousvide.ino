@@ -263,7 +263,7 @@ sensors.begin();
   lcd.setCursor(0, 1);
   lcd.print(F("   Rice Vide!"));
 
-  delay(1000);  // Splash screen
+  delay(500);  // Splash screen
 
   if (!sensors.getAddress(waterThermometer, 0)) Serial.println("Unable to find address for Device 0"); 
   if (!sensors.getAddress(heaterThermometer, 1)) Serial.println("Unable to find address for Device 1"); 
