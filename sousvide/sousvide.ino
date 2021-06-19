@@ -264,13 +264,6 @@ sensors.begin();
 
   delay(1000);  // Splash screen
 
-  lcd.setCursor(0, 0);
-  lcd.print(F("Sensor Count..."));
-  lcd.setCursor(0, 1);
-  lcd.print(sensors.getDeviceCount());
-
-  delay(400);  // Splash screen
-
   if (!sensors.getAddress(waterThermometer, 0)) Serial.println("Unable to find address for Device 0"); 
   if (!sensors.getAddress(heaterThermometer, 1)) Serial.println("Unable to find address for Device 1"); 
 
