@@ -71,7 +71,7 @@
 *       Moved the "Parts needed" and "Pin layout" information higher up
 *       Changed "8 digits led display" to "Adafruit RGB LCD SHIELD" in "Parts needed".
 *       Removed code and or comments that have to do with the 7 segment display
-*       Removed sensor count splash screen and changed Booting splash screen time from 500ms
+*       Removed sensor count splash screen and changed Booting splash screen time from 1000ms to 500ms
 *       Changed MAX_UPTIME_HOURS from 24 to 12 as I don't want it to be up for more than 12 hours
 *       TODO: 
 *       Buttons on the shield don't work but pushbuttons are on pins 12(+) and 11 (-)
