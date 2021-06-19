@@ -12,7 +12,7 @@ Rice Cooker Note
 =========================
 Made changes for rice cooker which doesn't have a heating coil in the water
 Using a 2x16 LCD rather than 7 Segment display.
-Using a DS18S20 sensor (Signal (white or yellow) to pin D3, RED cable to D2, black to GND)
+Using a DS18B20 sensor (Signal (white or yellow) to pin D3, RED cable to D2, black to GND)
 
 For now, adafruit's RGB lcd shield works except for the buttons.
 
