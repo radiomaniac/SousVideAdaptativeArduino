@@ -44,30 +44,6 @@
 // Relay on pin 8
 // Speaker (piezo) on pin 13
 //
-/*
-*
-*  Adaptive Sous vide with Adafruit RGB LCD
-*
-*  Adaptative regulation sous-vide cooker algorithm
-*
-*  See http://www.instructables.com/id/Cheap-and-effective-Sous-Vide-cooker-Arduino-power/ for more info
-*
-*  Author : Etienne Giust - 2013
-*
-*  Features
-*
-*  - Works out of the box : no need for tweaking or tuning, the software adapts itself to the characteristics of your cooker :  whether it is big, small, full of water, half-full, whether room temperature is low or high, it works.
-*  - Efficient regulation in the range of 0.5°C
-*  - Sound alarm warns when target temperature is reached
-*  - Automatic detection of lid opening and closing : regulation does not get mad when temperature probe is taken out of the water (which is a thing you need to do if you want to actually put food in your cooker)
-*  - Safety features : 
-*     - automatic cut-off after 5 minutes of continuous heating providing no change in temperature
-*     - automatic cut-off after 24 hours of operation
-*     - automatic cut-off when temperature reaches 95 °C
-*     - allows target temperature only in the safe 30°c to 90°C range 
-*  - Dead cheap and simple : no expensive LCD or Solid State Relay
-*  
- 
 *
 *  Updates 2014-07-27 by pctj101
 *
