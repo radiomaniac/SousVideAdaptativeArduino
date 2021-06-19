@@ -32,7 +32,6 @@
 // 4.7K ohm resistor 
 // 5V Relay module for Arduino, capable to drive AC125/250V at 10A
 // Rice Cooker
-
 // ------------------------- PIN LAYOUT
 //
 // Inputs
@@ -77,7 +76,6 @@
 *       Buttons on the shield don't work but pushbuttons are on pins 12(+) and 11 (-)
 *       Previously mentioned "Probably need to keep the heater 2-5 degrees hotter than the targetWaterTemp just to keep heat going in."
 */
-
 // Libraries for the DS18B20 Temperature Sensor
 #include <OneWire.h>
 #include <DallasTemperature.h>
@@ -117,11 +115,12 @@ byte degree[8] = // define the degree symbol
 
 
 // ------------------------- CONSTANTS
-
 #define HEATER_STOP_C 95.0
 #define HEATER_LIMIT_C 110.0
 #define MAX_HEATER_LAG 0.0    // Don't allow heater lag for a rice cooker
 
+// 8 segment display drivers
+//#define TEMP_DISPLAY_DRIVER 0
 #define DISPLAY_LEFT 4  //left 4 digits of display
 #define DISPLAY_RIGHT 0  //right 4 digits of display
 #define DISPLAY_CENTER 8
@@ -137,13 +136,12 @@ byte degree[8] = // define the degree symbol
 // temperature sensor and its pinout
 #define ONE_WIRE_BUS 2 // White or yellow cable to D2
 #define ONE_WIRE_PWR 3 // Red cable to D3
-#define ONE_WIRE_GND 4 // Black cable to GND or D4
 #define TEMPERATURE_PRECISION 12
 #define SAMPLE_DELAY 500  // Set to 5000 for tmp35 since it fluctuates rapidly, otherwise 500 for more stable DS18B20
 #define OUTPUT_TO_SERIAL true
 
 // relay
-#define RELAY_OUT_PIN 8
+#define RELAY_OUT_PIN 3
 #define RELAY_OUT_PIN_ON LOW
 #define RELAY_OUT_PIN_OFF HIGH
 
@@ -208,10 +206,10 @@ void turnOffRelay(char reason)
 
   lcd.setCursor(15,0);
   lcd.print(" ");
-  
+
   lcd.setCursor(15,0);   
   lcd.print(reason);
-  
+
   digitalWrite(RELAY_OUT_PIN,RELAY_OUT_PIN_OFF);
   isHeatOn = false;
 }    
@@ -237,8 +235,8 @@ void turnOnRelay()
 
   lcd.setCursor(15,0);
   lcd.print(" ");
-  
-  
+
+
 
   digitalWrite(RELAY_OUT_PIN,RELAY_OUT_PIN_ON);
   if (isHeatOn == false) {
@@ -247,7 +245,7 @@ void turnOnRelay()
   isHeatOn = true;
   tCheckNotHeatingWildly = millis() + ((unsigned long)60000 * MAX_HEATINGTIME_NO_TEMP_CHANGE_MINUTES);
 }
-    
+
 
 // ------------------------- SETUP
 
@@ -265,7 +263,7 @@ sensors.begin();
   lcd.print(F("   Rice Vide!"));
 
   delay(1000);  // Splash screen
-  
+
   lcd.setCursor(0, 0);
   lcd.print(F("Sensor Count..."));
   lcd.setCursor(0, 1);
@@ -275,10 +273,10 @@ sensors.begin();
 
   if (!sensors.getAddress(waterThermometer, 0)) Serial.println("Unable to find address for Device 0"); 
   if (!sensors.getAddress(heaterThermometer, 1)) Serial.println("Unable to find address for Device 1"); 
-  
+
   sensors.setResolution(waterThermometer, TEMPERATURE_PRECISION);
   sensors.setResolution(heaterThermometer, TEMPERATURE_PRECISION);
-  
+
   /*
   Initialize pushButtons
   */
@@ -301,13 +299,13 @@ sensors.begin();
 
         waterTemp = getWaterTempC();
   targetWaterTemp = (long) ((int)waterTemp);
-     
+
   maxUptimeMillis = MAX_UPTIME_HOURS * (unsigned long)3600 * (unsigned long)1000;
 
 turnOffRelay();
 
   lcd.clear();
- 
+
 }
 
 
@@ -323,7 +321,7 @@ unsigned long onUntil = 0;
 int dutyCycle = 0;
 
 void loop() {   
-  
+
   tcurrent = millis();
 
 
@@ -332,11 +330,11 @@ void loop() {
   lcd.setCursor(2, 0);
   long seconds = tcurrent / 1000;
   lcd.print(seconds, DEC);
-    
+
 
 
   displaytargetWaterTemp(targetWaterTemp);
-    
+
   if (tcurrent > nextCaculateHeaterTime) 
   {
     updateSensorsReadings();
@@ -344,24 +342,24 @@ void loop() {
     displayHeaterTemp(getHeaterTempC());
 
     nextSensorUpdateTime = tcurrent + 1000;
-    
-    
+
+
     dutyCycle = percentHeaterOn();
-    
-        
+
+
     lcd.setCursor(10, 0);
     lcd.print("   ");
 
     lcd.setCursor(10, 0);
     lcd.print(dutyCycle, DEC);
-  
-  
+
+
     onUntil = tcurrent + dutyCycle * (TOTAL_DUTY_DURATION / 100);
     if (dutyCycle > 0) 
     {
       turnOnRelay();
     }
-    
+
     nextCaculateHeaterTime = tcurrent + TOTAL_DUTY_DURATION;
   }
 
@@ -369,11 +367,11 @@ void loop() {
   {
       turnOffRelay();
   }
-      
+
   checkHeaterSafety(); // JC: Turn off heater if it's much hotter than water.
-  
+
   // read buttons state
-  
+
   if (tcurrent > nextButtonReadTime)
   {
     readButtonInputs();
@@ -387,14 +385,14 @@ void loop() {
 
 int percentHeaterOn() {
   int result = 0;
-  
+
   // WAY TOO COLD
   if (waterTemp < targetWaterTemp - BOOST_UNTIL_DELTA)
   {
     // Boost until waterTemp is close
     result = 75;
   } 
-  
+
   // TOO HOT
   else if (waterTemp > targetWaterTemp) 
   {
@@ -415,25 +413,25 @@ int percentHeaterOn() {
       // At this point too far over target, it is unacceptable to continue heating 
       result = 0;
     } 
-    
+
   }
-  
+
   // A LITTLE TOO COLD
   else 
   {
     // At this point, water is below target, but not by much
-    
+
     double waterTempLag = targetWaterTemp - waterTemp;
     double heaterTempLead = heaterTemp - targetWaterTemp;
-    
+
     double allowableLead = min(MAX_HEATER_LEAD, waterTempLag + MIN_HEATER_LEAD);
-    
+
     // Do not allow a HUGE heater lead
     if (heaterTempLead < allowableLead)
     { 
       double percentBoostNeeded = (waterTempLag * 1.0) / (BOOST_UNTIL_DELTA * 1.0);
       result = percentBoostNeeded * 100;
-      
+
       if (result < 30) result = 30;
       if (result > 75) result = 75;
     } 
@@ -442,7 +440,7 @@ int percentHeaterOn() {
       result = 0;
     }
   }
-  
+
   // Safety Check
   if (result) {
     if (heaterTemp > waterTemp + MAX_HEATER_LEAD) {
@@ -454,32 +452,32 @@ int percentHeaterOn() {
 }
 
 
-    
+
 // Security checks    
 void checkShutdownConditions(){
   boolean doShutdown = false;
-  
+
   // check for too long uptime
   if ( (long) (millis() - maxUptimeMillis) >= 0)
   {
     displayMsg("uptime", maxUptimeMillis);
     doShutdown = true;
   }
-  
+
   // check for too high temperature
   if (heaterTemp > HEATER_LIMIT_C)
   {
     displayMsg("heatSafe", heaterTemp);
     doShutdown = true;
   }
-  
-  
+
+
   if (waterTemp > SHUTDOWN_TEMP)
   {
     displayMsg("h2oSafe", waterTemp);
     doShutdown = true;
   }
-  
+
   // check for too long heating time with no temperature increase (temp probe can't be not trusted anymore so stop the device)
   if (tCheckNotHeatingWildly > 0 && isHeatOn && ( (long) (millis() - tCheckNotHeatingWildly) >= 0))
   {
@@ -493,7 +491,7 @@ void checkShutdownConditions(){
     tempBeforeHeating = waterTemp;
     tCheckNotHeatingWildly = millis() + ((unsigned long)60000 * MAX_HEATINGTIME_NO_TEMP_CHANGE_MINUTES);
   }
-  
+
   if (doShutdown == true)
   {
     shutdownDevice();
@@ -528,7 +526,7 @@ void readButtonInputs()
   sw_tempMore = digitalRead(BT_TEMP_MORE_PIN);
   sw_tempLess = digitalRead(BT_TEMP_LESS_PIN);
 
-  
+
   // process inputs
   if (sw_tempMore == LOW) { 
     targetWaterTemp= min(targetWaterTemp + 0.5, MAX_TARGET_TEMP);    
@@ -607,7 +605,7 @@ void displayTemp(float temp, int display_number)
 //  01.34*67.9*BC.DE*
   int temp100 = temp * 100;
   double tempdot100 = temp100/100.0;
-  
+
   if (display_number == DISPLAY_LEFT) {
     lcd.setCursor(0,1);
     lcd.print(tempdot100);
