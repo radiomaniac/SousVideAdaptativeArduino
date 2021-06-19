@@ -67,12 +67,12 @@
 *       Removed "Liquidcrystal lcd(etc.);" line
 *       Substituted liquidcrystal library for Adafruit's RGB LCD shield library and added wire.h too as it looks like it's needed for it to work.
 *       Uncommented "Adafruit_RGBLCDShield lcd = Adafruit_RGBLCDShield();"
-*       Changed the backlight color to "RED" to enable monochrome display's white light to work.
 *       Changed the minimum temperature from 50 to 30 to be able to make yogurt for example (37ºC needed)
 *       Moved the "Parts needed" and "Pin layout" information higher up
 *       Changed "8 digits led display" to "Adafruit RGB LCD SHIELD" in "Parts needed".
 *       Removed code and or comments that have to do with the 7 segment display
 *       Removed sensor count splash screen and changed Booting splash screen time from 500ms
+*       Changed MAX_UPTIME_HOURS from 24 to 12 as I don't want it to be up for more than 12 hours
 *       TODO: 
 *       Buttons on the shield don't work but pushbuttons are on pins 12(+) and 11 (-)
 *       Previously mentioned "Probably need to keep the heater 2-5 degrees hotter than the targetWaterTemp just to keep heat going in."
@@ -155,7 +155,7 @@ byte degree[8] = // define the degree symbol
 #define MIN_TARGET_TEMP 30   /*sufficient for most sous-vide recipes*/
 #define MAX_TARGET_TEMP 90   /*sufficient for most sous-vide recipes*/
 #define SHUTDOWN_TEMP 95   /*shutdown if temp reaches that temp*/
-#define MAX_UPTIME_HOURS 24   /*shutdown after 24 hours of operation*/
+#define MAX_UPTIME_HOURS 12   /*shutdown after 12 hours of operation*/
 #define MAX_HEATINGTIME_NO_TEMP_CHANGE_MINUTES 5   /*detect when temp sensor is not in the water and prevent overheating*/
 
 // regulation
