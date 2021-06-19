@@ -118,22 +118,10 @@ byte degree[8] = // define the degree symbol
 
 // ------------------------- CONSTANTS
 
-  #define UP_BTN 10
-  #define DOWN_BTN 12
-  #define LEFT_BTN 9
-  #define RIGHT_BTN 11
-  #define SHIFT_BTN 13  
-  
-  #define WATER_PIN A5
-  #define HEATER_PIN A4
-  
-  
 #define HEATER_STOP_C 95.0
 #define HEATER_LIMIT_C 110.0
 #define MAX_HEATER_LAG 0.0    // Don't allow heater lag for a rice cooker
 
-// 8 segment display drivers
-//#define TEMP_DISPLAY_DRIVER 0
 #define DISPLAY_LEFT 4  //left 4 digits of display
 #define DISPLAY_RIGHT 0  //right 4 digits of display
 #define DISPLAY_CENTER 8
@@ -155,7 +143,7 @@ byte degree[8] = // define the degree symbol
 #define OUTPUT_TO_SERIAL true
 
 // relay
-#define RELAY_OUT_PIN 3
+#define RELAY_OUT_PIN 8
 #define RELAY_OUT_PIN_ON LOW
 #define RELAY_OUT_PIN_OFF HIGH
 
