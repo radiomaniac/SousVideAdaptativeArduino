@@ -40,7 +40,7 @@
 // Temperature sensor on pin 9 (data pin of OneWire sensor)
 //
 // Outputs
-// Relay on pin 8
+// Relay on pin 3
 // Speaker (piezo) on pin 13
 //
 *
