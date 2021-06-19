@@ -72,6 +72,7 @@
 *       Moved the "Parts needed" and "Pin layout" information higher up
 *       Changed "8 digits led display" to "Adafruit RGB LCD SHIELD" in "Parts needed".
 *       Removed code and or comments that have to do with the 7 segment display
+*       Removed sensor count splash screen
 *       TODO: 
 *       Buttons on the shield don't work but pushbuttons are on pins 12(+) and 11 (-)
 *       Previously mentioned "Probably need to keep the heater 2-5 degrees hotter than the targetWaterTemp just to keep heat going in."
