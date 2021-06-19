@@ -21,12 +21,13 @@
 *     - allows target temperature only in the safe 30°c to 90°C range 
 *  - Dead cheap and simple : no expensive LCD or Solid State Relay
 *  
-*  // ------------------------- PARTS NEEDED
-
+* 
+// ------------------------- PARTS NEEDED
+//
 // Arduino board
 // Adafruit RGB LCD SHIELD
 // Pushbutton x 2
-// Piezo element 
+// Piezo element (optional)
 // Waterproof DS18B20 Digital temperature sensor
 // 4.7K ohm resistor 
 // 5V Relay module for Arduino, capable to drive AC125/250V at 10A
@@ -34,15 +35,16 @@
 
 // ------------------------- PIN LAYOUT
 //
-// inputs
-// Pushbutton + on pin 6 with INPUT_PULLUP mode
-// Pushbutton - on pin 5 with INPUT_PULLUP mode
+// Inputs
+// Pushbutton + on pin 12 with INPUT_PULLUP mode
+// Pushbutton - on pin 11 with INPUT_PULLUP mode
 // Temperature sensor on pin 9 (data pin of OneWire sensor)
-
-// outputs
+//
+// Outputs
 // Relay on pin 8
 // Speaker (piezo) on pin 13
- /*
+//
+/*
 *
 *  Adaptive Sous vide with Adafruit RGB LCD
 *
@@ -65,24 +67,6 @@
 *     - allows target temperature only in the safe 30°c to 90°C range 
 *  - Dead cheap and simple : no expensive LCD or Solid State Relay
 *  
-*  // ------------------------- PARTS NEEDED
-// Arduino board
-// Adafruit RGB LCD SHIELD
-// Pushbutton x 2
-// Piezo element 
-// Waterproof DS18B20 Digital temperature sensor
-// 4.7K ohm resistor 
-// 5V Relay module for Arduino, capable to drive AC125/250V at 10A
-// Rice Cooker
-// ------------------------- PIN LAYOUT
-//
-// inputs
-// Pushbutton + on pin 6 with INPUT_PULLUP mode
-// Pushbutton - on pin 5 with INPUT_PULLUP mode
-// Temperature sensor on pin 9 (data pin of OneWire sensor)
-// outputs
-// Relay on pin 8
-// Speaker (piezo) on pin 13
  
 *
 *  Updates 2014-07-27 by pctj101
@@ -113,11 +97,9 @@
 *       Moved the "Parts needed" and "Pin layout" information higher up
 *       Changed "8 digits led display" to "Adafruit RGB LCD SHIELD" in "Parts needed".
 *       Removed code and or comments that have to do with the 7 segment display
-*
-*  TODO: 
-    For some reason the sensor DS18B20 doesn't work (yellow on pin 9 with 4.7k resistor going to 5v. Red to 5v, black to GND.)
-    Buttons on the shield don't work but pushbuttons are on pins 12(+) and 11 (-)
-    Previously mentioned "Probably need to keep the heater 2-5 degrees hotter than the targetWaterTemp just to keep heat going in."
+*       TODO: 
+*       Buttons on the shield don't work but pushbuttons are on pins 12(+) and 11 (-)
+*       Previously mentioned "Probably need to keep the heater 2-5 degrees hotter than the targetWaterTemp just to keep heat going in."
 */
 
 // Libraries for the DS18B20 Temperature Sensor
