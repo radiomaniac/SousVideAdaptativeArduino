@@ -79,6 +79,7 @@
 *       Connecting the relay signal cable to a pin other than D3 results in the display showing a temperature of -127ºC (probably the sensor stops being recognized, for some reason)
 *
 // Libraries for the DS18B20 Temperature Sensor
+
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
@@ -92,6 +93,7 @@
 
 Adafruit_RGBLCDShield lcd = Adafruit_RGBLCDShield();
 // These #defines make it easy to set the backlight color
+
 #define RED 0x1
 #define YELLOW 0x3
 #define GREEN 0x2
@@ -117,25 +119,30 @@ byte degree[8] = // define the degree symbol
 
 
 // ------------------------- CONSTANTS
+
 #define HEATER_STOP_C 95.0
 #define HEATER_LIMIT_C 110.0
 #define MAX_HEATER_LAG 0.0    // Don't allow heater lag for a rice cooker
 
 // 8 segment display drivers
 //#define TEMP_DISPLAY_DRIVER 0
+
 #define DISPLAY_LEFT 4  //left 4 digits of display
 #define DISPLAY_RIGHT 0  //right 4 digits of display
 #define DISPLAY_CENTER 8
 
 
 // push-buttons
+
 #define BT_TEMP_MORE_PIN 12 //INPUT_PULLUP mode
 #define BT_TEMP_LESS_PIN 11 //INPUT_PULLUP mode
 
 // piezo
+
 #define PIEZO_PIN 13
 
 // temperature sensor and its pinout
+
 #define ONE_WIRE_BUS 2 // White or yellow cable to D2
 #define ONE_WIRE_PWR 3 // Red cable to D3
 #define TEMPERATURE_PRECISION 12
@@ -143,15 +150,18 @@ byte degree[8] = // define the degree symbol
 #define OUTPUT_TO_SERIAL true
 
 // relay
+
 #define RELAY_OUT_PIN 3
 #define RELAY_OUT_PIN_ON LOW
 #define RELAY_OUT_PIN_OFF HIGH
 
 
 // First Ramp
+
 #define FIRST_RAMP_CUTOFF_RATIO 0.90
 
 // Security features
+
 #define MIN_TARGET_TEMP 30   /*sufficient for most sous-vide recipes*/
 #define MAX_TARGET_TEMP 90   /*sufficient for most sous-vide recipes*/
 #define SHUTDOWN_TEMP 95   /*shutdown if temp reaches that temp*/
@@ -159,6 +169,7 @@ byte degree[8] = // define the degree symbol
 #define MAX_HEATINGTIME_NO_TEMP_CHANGE_MINUTES 5   /*detect when temp sensor is not in the water and prevent overheating*/
 
 // regulation
+
 #define MIN_SWITCHING_TIME 1500  /* Minimum ON duration of the heating element */
 #define DROP_DEGREES_FOR_CALC_REGULATION 0.12 /* minimum drop in degrees used to calculate regulation timings (should be small : <0.2 ) */
 #define LARGE_TEMP_DIFFERENCE 1  /* for more than "1" degree, use the Large setting (Small otherwise)*/
